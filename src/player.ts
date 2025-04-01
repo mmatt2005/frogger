@@ -1,4 +1,5 @@
 import { MOVEMENT_SPEED, PLAYER_SIZE } from "./constant"
+import { tileMap } from "./main"
 
 export class Player {
     constructor(startingX: number, startingY: number) {
@@ -7,8 +8,10 @@ export class Player {
         this.listener()
     }
     size: number = PLAYER_SIZE
+    color: string = "black"
     x: number
     y: number
+    image: HTMLImageElement | null = null;
 
 
     listener() {
@@ -25,7 +28,6 @@ export class Player {
         })
     }
 
-    
     /**
      * 3/30/25
      * @description checks to see if the player is off the screen in the x direction
@@ -39,7 +41,7 @@ export class Player {
         return true
     }
 
-    
+
     /**
      * @description checks to see if the player is off the screen in the y direction
      *
@@ -53,8 +55,14 @@ export class Player {
 
     }
 
+    setImage() { 
+        this.image = tileMap.getTile("player.png")?.img || null
+    }
+
     draw(context: CanvasRenderingContext2D) {
-        context.fillStyle = "black"
-        context.fillRect(this.x, this.y, this.size, this.size)
+        context.fillStyle = this.color
+        if (this.image) { 
+            context.drawImage(this.image, this.x, this.y)
+        }
     }
 }

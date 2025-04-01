@@ -1,126 +1,58 @@
 import { PLAYER_SIZE } from './constant'
+import { ROW_LENGTH, RowValue, map } from './map'
 import { Player } from './player'
 import './style.css'
-import { roadTileRow, walkableTileRow } from './tile'
+import { TileMap } from './tileMap'
+import { tileHeight, tileWidth } from './utils'
+import { Vehicle } from './vehicle'
+import { VehicleManager } from './vehicleManager'
+
 const canvas = document.querySelector("canvas")!
 const context = canvas.getContext("2d")!
 canvas.width = window.innerWidth
 canvas.height = window.innerHeight
 canvas.style.backgroundColor = "black"
 
-const ROW_LENGTH = 10
-const COL_LENGTH = 10
 
-export type RowValue = "w" | "r" | 1
-export type Row = [RowValue, RowValue, RowValue, RowValue, RowValue, RowValue, RowValue, RowValue, RowValue, RowValue]
-export type Map = [Row, Row, Row, Row, Row, Row, Row, Row, Row, Row]
-
-const map: Map = [
-  walkableTileRow(),
-  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-  roadTileRow(),
-  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-  walkableTileRow()
-]
-
-
-export type TileSrc = "grass.png" | "road.jpg"
-export interface TileCache {
-  name: TileSrc
-  img: HTMLImageElement
-}
-
-const TILES: TileSrc[] = ["grass.png", "road.jpg"]
+export const tileMap = new TileMap()
+export const player = new Player((window.innerWidth / 2) + (PLAYER_SIZE / 2), window.innerHeight - PLAYER_SIZE)
+export const vehicleManager = new VehicleManager()
 
 export class Game {
   constructor() {
-    this.player = new Player(0, window.innerHeight - PLAYER_SIZE)
-    this.loadTiles()
-  }
-
-  // filler commit 3/31/25
-
-  async loadTiles() {
-    console.time("All tiles loaded")
-    const loadedTiles = TILES.map(tile => new Promise<TileCache>((resolve, reject) => {
-      const image = new Image()
-      console.time(tile)
-      image.src = tile
-
-      image.onload = () => {
-        console.timeEnd(tile)
-        this.tileCache.push({ name: tile, img: image })
-        resolve({ name: tile, img: image })
-      }
-
-      image.onerror = () => {
-        console.log(`Failed to load tile: ${tile}`)
-        reject()
-      }
-    }))
-
-    await Promise.all(loadedTiles)
-    console.timeEnd("All tiles loaded")
-
-    // Start the game loop after all tiles have been loaded.
-    this.loop()
-  }
-
-  getTile(tileName: TileSrc): TileCache | null { 
-    return this.tileCache.find(({name}) => name === tileName) || null
-  }
-
-  drawTile(tileName: TileSrc, x: number, y: number, width: number, height: number) {
-    const tile = this.getTile(tileName)
-    if (tile) {
-      context.drawImage(tile.img, x, y, width, height)
+    // Once all the tiles have been loaded start the game loop.
+    tileMap.onAllTilesLoaded = () => {
+      this.loop()
+      vehicleManager.addVehicle(new Vehicle(0, tileMap.findTileRow("r") || 0, vehicleManager.removeVehicle))
+      player.setImage()
     }
   }
+  paused: boolean = false
 
-
-  drawMap() {
-    const width = Math.ceil(window.innerWidth / COL_LENGTH)
-    const height = Math.ceil(window.innerHeight / ROW_LENGTH)
-
-    for (let row = 0; row < ROW_LENGTH; row++) {
-      for (let col = 0; col < map[row].length; col++) {
-        const x = width * col
-        const y = height * row
-        const rowValue: RowValue = map[row][col]
-
-        if (rowValue === "w") {
-          this.drawTile("grass.png", x, y, width, height)
-        } else if (rowValue === "r") {
-          this.drawTile("road.jpg", x, y, width, height)
-        }
-
-        this.drawDebug(x, y, row, col, width, height)
-      }
-    }
+  pauseGame() { 
+    this.paused = true 
   }
 
-  tileCache: TileCache[] = []
-  player: Player
+  resumeGame() { 
+    this.paused = false
+    window.requestAnimationFrame(this.loop)
+  }
 
 
-  loop() {
+  loop = () => {
+    if (this.paused) return console.log("GAME Paused!")
+
     context.clearRect(0, 0, canvas.width, canvas.height)
     this.draw()
 
-    window.requestAnimationFrame(() => this.loop())
+    window.requestAnimationFrame(this.loop)
   }
-
 
 
   draw() {
     this.drawMap()
-
-    this.player.draw(context)
+    player.draw(context)
+    vehicleManager.draw(context)
   }
 
   drawDebug(x: number, y: number, row: number, col: number, width: number, height: number) {
@@ -135,6 +67,30 @@ export class Game {
     context.strokeStyle = "white"
     context.strokeRect(x, y, width, height)
   }
+
+  drawMap() {
+    const width = tileWidth()
+    const height = tileHeight()
+
+    for (let row = 0; row < ROW_LENGTH; row++) {
+      for (let col = 0; col < map[row].length; col++) {
+        const x = width * col
+        const y = height * row
+        const rowValue: RowValue = map[row][col]
+
+        if (rowValue === "w") {
+          tileMap.drawTile(context, "grass.png", x, y, width, height)
+        } else if (rowValue === "r") {
+          tileMap.drawTile(context, "road.jpg", x, y, width, height)
+        } else {
+          context.fillStyle = "darkgray"
+          context.fillRect(x, y, width, height)
+        }
+
+        this.drawDebug(x, y, row, col, width, height)
+      }
+    }
+  }
 }
 
-new Game()
+export const game = new Game()
